@@ -1,0 +1,1 @@
+This project helps in predicting whether someone has chances of having certain medical condition/disease or not. The diseases covered in the app are Lung Cancer, Diabetes, Heart Attack and Parkinson's. 
