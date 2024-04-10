@@ -13,10 +13,11 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import f1_score
 from sklearn.metrics import confusion_matrix
 from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
 
 def main():
    
-    st.sidebar.image("D:/M L Mini Project/full implemented/side image.jpeg", use_column_width=True)  
+    st.sidebar.image("images\Doctor.png", use_column_width=True)  
     selected_page = st.sidebar.radio("Navigation Menu", ["Home", "Diabetes", "Lung Cancer", "Heart Attack", "Parkinson's"])
 
     if selected_page == "Diabetes":
@@ -37,7 +38,7 @@ def main():
         show_home_page()
 
 def show_home_page():
-    image_path = 'D:/M L Mini Project/full implemented/main image.jpeg'
+    image_path = 'images\logo.png'
     st.image(image_path, use_column_width=True)
     st.title("Multimodal Disease Risk Predictor")
     st.write("Multimodal Disease Risk Predictor (MMDRP) is a holistic health analysis platform. This app predicts the risk of various diseases based on multimodal data.")
@@ -120,34 +121,39 @@ def show_home_page():
 
     st.markdown(html_content, unsafe_allow_html=True)
 def show_diabetes_page():
-    diabetes_dataset = pd.read_csv('diabetes_prediction_dataset.csv')
+    @st.cache_data
+    def data_preprocessing():
+        diabetes_dataset = pd.read_csv('diabetes_prediction_dataset.csv')
 
-    label_encoding = LabelEncoder()
-    diabetes_dataset["gender"] = label_encoding.fit_transform(diabetes_dataset["gender"])
-    diabetes_dataset["smoking_history"] = label_encoding.fit_transform(diabetes_dataset["smoking_history"])
+        label_encoding = LabelEncoder()
+        diabetes_dataset["gender"] = label_encoding.fit_transform(diabetes_dataset["gender"])
+        diabetes_dataset["smoking_history"] = label_encoding.fit_transform(diabetes_dataset["smoking_history"])
 
-    x = diabetes_dataset.drop(columns='diabetes', axis=1)
-    y = diabetes_dataset['diabetes']
+        x = diabetes_dataset.drop(columns='diabetes', axis=1)
+        y = diabetes_dataset['diabetes']
 
-    scaler = StandardScaler()
-    scaler.fit(x)
-    x_standardized = scaler.transform(x)
+        scaler = StandardScaler()
+        x_standardized = scaler.fit_transform(x)
+        pca = PCA(n_components=0.95)  # Keep 95% of variance
+        x_pca = pca.fit_transform(x_standardized)
+        x_train, x_test, y_train, y_test = train_test_split(x_pca, y, test_size=0.1, stratify=y, random_state=2)
+        return x_train, x_test, y_train, y_test, scaler, pca
 
-    x_train, x_test, y_train, y_test = train_test_split(x_standardized, y, test_size=0.2, stratify=y, random_state=2)
-
-    classifier = svm.SVC(kernel='linear')
-    classifier.fit(x_train, y_train)
+    x_train, x_test, y_train, y_test,scaler,pca = data_preprocessing() 
+    @st.cache_data
+    def train_classifier():
+        classifier = svm.SVC(kernel='linear')
+        classifier.fit(x_train, y_train)
+        return classifier
+    classifier= train_classifier()
 
     st.title("Diabetes Prediction Prediction")
 
     st.header("Input Data")
-    st.write(" 1-MALE and 0-Female")
-    gender = st.radio("Gender", ["1", "0"])
+    gender = st.radio("Select your gender", ["Male", "Female"])
     age = st.slider("Age", 20, 100, 40)
-    st.write(" 1-Yes and 0-No")
-    hypertension = st.selectbox("Hypertension", ["0","1"])
-    st.write(" 1-Yes and 0-No")
-    heart_disease = st.selectbox("Heart Disease", ["0","1"])
+    hypertension = st.selectbox("Hypertension", ["Yes","No"])
+    heart_disease = st.selectbox("Heart Disease", ["Yes","No"])
     smoking_history = st.selectbox("Smoking History", ["No info","Never","Ever" ,"Former", "Current"])
     bmi = st.slider("BMI", 10.0, 50.0, 25.0)
     HbA1c_level = st.slider("HbA1c Level", 4.0, 15.0, 7.0)
@@ -161,16 +167,17 @@ def show_diabetes_page():
                             smoking_history_encoded, bmi, HbA1c_level, blood_glucose_level]])
 
     input_data_standardized = scaler.transform(input_data)
+    input_data_pca = pca.transform(input_data_standardized)
 
     if input_data_standardized.shape[1] != x_train.shape[1]:
         st.error("Number of features in input data does not match the training data.")
     else:
         st.write("Note: Prediction may take some time due to large dataset.")
-        prediction = classifier.predict(input_data_standardized)
+        prediction = classifier.predict(input_data_pca)
         if st.button("Predict"):
             
             st.header("Prediction")
-            st.write("Result:", "Diabetic" if prediction[0] == 1 else "Non-Diabetic")
+            st.write("Result:", "You have high risk of being Diabetic" if prediction[0] == 1 else "You have low risk of being Diabetic")
 
     # Add your Diabetes content here
 
@@ -200,13 +207,13 @@ def show_lung_cancer_page():
     st.title("Lung Cancer Risk Prediction")
 
     gender = st.selectbox("Please select your gender", ["M", "F"])
-    age = st.slider("Select your age", min_value=40, max_value=100)
+    age = st.slider("Select your age", min_value=0, max_value=100)
     st.subheader("2-YES and 1-NO")
     smoke = st.selectbox("Do you smoke?", ["2", "1"])
     yellow_fingers = st.selectbox("Do you have yellow fingers?", ["2", "1"])
     anxiety = st.selectbox("Do you have Anxiety?", ["2", "1"])
     peer_pressure = st.selectbox("Do you have Peer Pressure to smoke?", ["2", "1"])
-    chronic_disease = st.selectbox("Do you have a chronic disease?", ["2", "1"])
+    chronic_disease = st.selectbox("Do you have a chronic disease? (Chronic diseases are conditions that last at least a year and require ongoing medical attention, or limit daily activities.)", ["2", "1"])
     fatigue = st.selectbox("Do you feel fatigue?", ["2", "1"])
     allergy = st.selectbox("Do you have any type of allergy?", ["2", "1"])
     wheezing_issue = st.selectbox("Do you have wheezing issue?", ["2", "1"])
@@ -226,7 +233,12 @@ def show_lung_cancer_page():
     if st.button("Check Lung Cancer test result"):
         prediction = random_forest.predict(user_inputs_scaled)
         predicted_class = le.inverse_transform(prediction)[0]
-        st.write("Lung Cancer Risk:", predicted_class)
+        # if(predicted_class=='Yes'):
+        #     print("You have the high risk of suffering from Lung Cancer")
+        # else:
+        #     print("You have the low risk of suffering from Lung Cancer")
+
+        st.write("Do you have High Lung Cancer Risk:", predicted_class)
 
 def show_heart_attack_page():
             
@@ -241,7 +253,6 @@ def show_heart_attack_page():
             # Train the logistic regression model
             model = LogisticRegression()
             model.fit(X_train, Y_train)
-
 
             # Input form for user to enter parameters
             age = st.slider("Age", min_value=29, max_value=77, step=1, value=52)
@@ -264,7 +275,7 @@ def show_heart_attack_page():
 
             # Display the prediction result
                 if prediction[0] == 0:
-                    st.write('Person may have no heart disease')
+                    st.write('Person may not have heart disease')
                 else:
                     st.write('Person may have heart disease')
 
